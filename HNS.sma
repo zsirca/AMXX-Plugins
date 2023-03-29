@@ -13,7 +13,7 @@ const m_pPlayer    = 41;
 const m_fPainShock = 108;
 const m_iHideHUD   = 361;
 
-new const g_szGamename[ ] = "Escondidas EVG";
+new const g_szGamename[ ] = "HNS";
 
 new g_iMaxPlayers, g_iMsgScreenFade, g_iMsgSendAudio, g_iMsgStatusText, g_iMsgStatusValue, g_iNubSlash, g_iTimer, g_iTimerEntity, g_iSendAudioMessage;
 
@@ -60,7 +60,7 @@ public plugin_init( ) {
 	register_forward( FM_EmitSound,          "FwdEmitSound" );
 	register_forward( FM_ClientKill,         "FwdClientKill" );
 	register_forward(FM_CmdStart, "CmdStart" )
-	register_think( "hns_timer",             "FwdThinkTimer" );
+	register_think("hns_timer",             "FwdThinkTimer" );
 	
 	RegisterHam( Ham_Weapon_PrimaryAttack,   "weapon_knife", "FwdHamKnifePrimaryAttack" );
 	RegisterHam( Ham_Weapon_SecondaryAttack, "weapon_knife", "FwdHamKnifeSecondaryAttack" );
