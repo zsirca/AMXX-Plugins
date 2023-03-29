@@ -1,0 +1,230 @@
+#include < amxmodx >
+#include < cstrike >
+#include < engine >
+#include < hamsandwich >
+#include < fakemeta >
+
+#pragma semicolon 1
+
+#if AMXX_VERSION_NUM < 183
+
+	#define client_disconected client_disconnect
+	#define print_team_default 0
+	#define MAX_PLAYERS 32
+	#define MAX_NAME_LENGTH 32
+#endif
+
+#define SetPlayerBit(%1,%2) ( %1 |= ( 1 << ( %2 & 31 ) ) )
+#define ClearPlayerBit(%1,%2) ( %1 &= ~( 1 << ( %2 & 31 ) ) )
+#define GetPlayerBit(%1,%2) ( %1 & ( 1 << ( %2 & 31 ) ) )
+
+#define IsValidConnected(%1) ( 1 <= %1 <= g_iMaxPlayers && is_user_connected( %1 ) )
+
+#define ID_ACTIVESKILL ( iTaskId - TASKID_ACTIVESKILL )
+#define ID_REMOVESKILL ( iTaskId - TASKID_REMOVESKILL )
+
+new const UNFREEZE_SOUND[ ] = "unfreeze.wav";
+new const FREEZE_SOUND[ ] = "freeze.wav";
+
+const Float:TASK_ADVERTISING = 90.0;
+
+const ITEM_COST = 5000;
+const MIN_PLAYERS = 2;
+
+enum _:struckTasks( += 1337 ) {
+
+	TASKID_ACTIVESKILL = 1338,
+	TASKID_REMOVESKILL
+};
+
+new g_iMaxPlayers;
+new g_iHasAcquiredAbility;
+new g_iFrozen;
+
+new g_szPlayerName[ MAX_PLAYERS + 1 ][ MAX_NAME_LENGTH ];
+
+native shop_add_item_menu(szTitle[], szForward[], iPrecio);
+
+public plugin_init( ) {
+
+	register_plugin( "Item: Modo dios", "1.0", "zsirca" );
+
+	shop_add_item_menu("Modo Dios", "ClientCommand_BuyGodMode", 300);
+
+	register_event( "HLTV", "RoundStart", "a", "1=0", "2=0" );
+
+	RegisterHam( Ham_Spawn, "player", "PlayerSpawn", 1);
+	RegisterHam( Ham_Killed, "player", "PlayerKilled", 1);
+
+	register_forward( FM_CmdStart, "CommandStart" );
+
+	g_iMaxPlayers = get_maxplayers( );
+}
+
+public plugin_precache( ) {
+
+	precache_sound( UNFREEZE_SOUND );
+	precache_sound( FREEZE_SOUND );
+}
+
+
+public client_putinserver( I_Player ) {
+
+	remove_task( I_Player + TASKID_ACTIVESKILL );
+	remove_task( I_Player + TASKID_REMOVESKILL );
+
+	ClearPlayerBit( g_iHasAcquiredAbility, I_Player );
+	ClearPlayerBit( g_iFrozen, I_Player );
+}
+
+public ClientCommand_BuyGodMode( const I_Player ) { // al apretar la letra R
+
+	if( GetConnectedPlayers( ) > MIN_PLAYERS ) {
+
+		chatcolor(I_Player, "!g[HNS]!y Para utilizar la habilidad se necesitan minimo !g%i !yjugadores!", MIN_PLAYERS );
+		return PLUGIN_HANDLED;
+	}
+
+	SetPlayerBit( g_iHasAcquiredAbility, I_Player );
+
+	remove_task( I_Player + TASKID_ACTIVESKILL);
+	set_task( 0.1, "task_ActivePlayerSkill", I_Player + TASKID_ACTIVESKILL);
+
+	get_user_name( I_Player, g_szPlayerName[ I_Player ], charsmax( g_szPlayerName[ ] ) );
+	chatcolor(0, "!g[HNS]!y El jugador!t %s!y compro la habilidad!g MODO DIOS!y, Cuidado!!.", g_szPlayerName[ I_Player ] );
+
+	return PLUGIN_HANDLED;
+}
+public RoundStart( ) {
+
+	for( new I_Player = 1; I_Player <= g_iMaxPlayers; I_Player++ ) {
+
+		if( !GetPlayerBit( g_iHasAcquiredAbility, I_Player ) || !is_user_connected( I_Player ) )
+			continue;
+
+		ClearPlayerBit( g_iHasAcquiredAbility, I_Player );
+	}
+}
+public PlayerSpawn( const I_Player ) {
+
+	if( !is_user_alive( I_Player ) )
+		return HAM_IGNORED;
+
+	ClearPlayerBit( g_iFrozen, I_Player );
+	return HAM_IGNORED;
+}
+
+public PlayerKilled( const iVictim, const iAttacker, const iShouldGib ) {
+
+	new iCheck; iCheck = ( iVictim == iAttacker || !IsValidConnected( iAttacker ) ) ? 1 : 0;
+
+	if( iCheck )
+		return HAM_IGNORED;
+
+	ClearPlayerBit( g_iFrozen, iVictim );
+
+	return HAM_IGNORED;
+}
+public CommandStart( const I_Player, const UC_Handle, const iSeed ) {
+
+	if( is_user_alive( I_Player ) && !GetPlayerBit( g_iHasAcquiredAbility, I_Player ) ) {
+
+		new iButton = get_uc( UC_Handle, UC_Buttons );
+
+		if( iButton & IN_RELOAD ) {
+
+		   ClientCommand_BuyGodMode( I_Player );
+		}
+	}
+}
+public task_ActivePlayerSkill( const iTaskId ) {
+
+	new I_Player = ( iTaskId > g_iMaxPlayers) ? ID_ACTIVESKILL : iTaskId;
+
+	for( new I = 1; I <= g_iMaxPlayers; I++ ) {
+
+		if( GetPlayerBit( g_iHasAcquiredAbility, I ) || !is_user_alive( I ) )
+			continue;
+
+		FreezePlayer( I );
+	}
+
+	remove_task( I_Player + TASKID_REMOVESKILL);
+	set_task( 10.0, "task_RemovePlayerSkill", I_Player + TASKID_REMOVESKILL);
+
+	return PLUGIN_HANDLED;
+}
+
+public task_RemovePlayerSkill( const iTaskId ) {
+
+	new I_Player = ( iTaskId > g_iMaxPlayers) ? ID_REMOVESKILL : iTaskId;
+
+	for( new I = 1; I <= g_iMaxPlayers; I++ ) {
+
+		if( !GetPlayerBit( g_iFrozen, I ) || !is_user_alive( I ) )
+			continue;
+
+		UnfreezePlayer( I );
+	}
+
+	chatcolor(0, "!g[HNS]!y La habilidad de!t %s!y ha caducado!", g_szPlayerName[ I_Player ] );
+	return PLUGIN_HANDLED;
+}
+FreezePlayer( const I_Player ) {
+
+	if( is_user_alive( I_Player ) ) {
+
+		emit_sound( I_Player, CHAN_BODY, FREEZE_SOUND, VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
+		entity_set_int( I_Player, EV_INT_flags, entity_get_int( I_Player, EV_INT_flags ) | FL_FROZEN );
+	}
+
+	SetPlayerBit( g_iFrozen, I_Player );
+}
+
+UnfreezePlayer( const I_Player ) {
+
+	ClearPlayerBit( g_iFrozen, I_Player );
+
+	if( is_user_alive( I_Player ) ) {
+
+		emit_sound( I_Player, CHAN_BODY, UNFREEZE_SOUND, VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
+		entity_set_int( I_Player, EV_INT_flags, entity_get_int( I_Player, EV_INT_flags ) & ~FL_FROZEN );
+	}
+}
+
+GetConnectedPlayers( ) {
+
+	static iConnected, I_Player, CsTeams:iTeam;
+	iConnected = 0;
+	
+	for( I_Player = 1; I_Player <= g_iMaxPlayers; I_Player++ ) {
+
+		if( is_user_connected( I_Player ) ) {
+
+			iTeam = cs_get_user_team( I_Player );
+			
+			if( iTeam != CS_TEAM_UNASSIGNED && iTeam != CS_TEAM_SPECTATOR )
+				iConnected++;
+		}
+	}
+	
+	return iConnected;
+}
+stock chatcolor(id, const input[], any:...)
+{
+    static szMsg[191], msgSayText;
+    
+    if (!msgSayText)
+        msgSayText = get_user_msgid("SayText");
+    
+    vformat(szMsg, 190, input, 3);
+
+    replace_all(szMsg, 190, "!g", "^4");
+    replace_all(szMsg, 190, "!y", "^1");
+    replace_all(szMsg, 190, "!t", "^3");
+    
+    message_begin(id ? MSG_ONE_UNRELIABLE : MSG_BROADCAST, msgSayText, .player = id);
+    write_byte(id ? id : 33);
+    write_string(szMsg);
+    message_end();
+} 
