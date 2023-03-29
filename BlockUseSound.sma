@@ -1,8 +1,7 @@
 #include <amxmodx>
 #include <fakemeta>
 
-new cmd_click
-new bool:g_click
+new cmd_click, bool:g_click
 
 public plugin_init() {
 	register_plugin("Block Use Sound", "1.0", "zsirca")
